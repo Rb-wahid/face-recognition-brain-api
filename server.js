@@ -3,6 +3,10 @@ import bodyParser from "body-parser";
 import bcrypt, { hash } from "bcrypt-nodejs";
 import cors from "cors";
 import knex from "knex";
+import {handleRegister} from "./controllers/register.js";
+import {handleSignin} from "./controllers/signin.js";
+import { handleProfileGet } from "./controllers/profile.js";
+import { handleImage } from "./controllers/image.js";
 
 const db = knex({
   client: "pg",
@@ -20,88 +24,21 @@ app.use(bodyParser.json());
 app.use(cors());
 
 app.get("/", (req, res) => {
-  res.send(database.users);
+  res.send(db.users);
 });
 
-app.post("/signin", (req, res) => {
-  const { email, password } = req.body;
 
-  db.select("email", "hash")
-    .from("login")
-    .where("email", "=", email)
-    .then((data) => {
-      const isValid = bcrypt.compareSync(password, data[0].hash);
-      if (isValid) {
-        return db
-          .select("*")
-          .from("users")
-          .where("email", "=", email)
-          .then((user) => {
-            res.json(user[0]);
-          })
-          .catch((err) => res.status(400).json("Unable to get user"));
-      } else {
-        res.status(400).json("wrong credentials");
-      }
-    })
-    .catch((err) => res.status(400).json("wrong credentials"));
-});
+app.post("/signin", (req, res) => { handleSignin(req, res, db, bcrypt)})
 
-app.post("/register", (req, res) => {
-  const { name, email, password } = req.body;
-  const hash = bcrypt.hashSync(password);
+app.post("/register", (req, res) => { handleRegister(req, res, db, bcrypt)});
 
-  db.transaction((trx) => {
-    trx
-      .insert({
-        hash: hash,
-        email: email,
-      })
-      .into("login")
-      .returning("email")
-      .then((loginMail) => {
-        return trx("users")
-          .returning("*")
-          .insert({
-            email: loginMail[0],
-            name: name,
-            joined: new Date(),
-          })
-          .then((user) => {
-            res.json(user[0]);
-          });
-      })
-      .then(trx.commit)
-      .catch(trx.rollback);
-  }).catch((err) => res.status(400).json(err.detail));
-});
 
-app.get("/profile/:id", (req, res) => {
-  const { id } = req.params;
-  db.select("*")
-    .from("users")
-    .where({ id })
-    .then((user) => {
-      if (user.length) {
-        res.json(user[0]);
-      } else {
-        res.status(400).json("Not Found");
-      }
-    })
-    .catch((err) => res.status(400).json("error getting user"));
-});
+app.get("/profile/:id", (req, res) => { handleProfileGet(req, res, db) });
 
-app.put("/image", (req, res) => {
-  const { id } = req.body;
-  db("users")
-    .where("id", "=", id)
-    .increment("entries", 1)
-    .returning("entries")
-    .then((entries) => {
-      res.json(entries[0]);
-    })
-    .catch((err) => res.status(400).json("Unable to get entries"));
-});
+
+
+app.put("/image", (req, res) => { handleImage(req, res, db) });
+
 
 app.listen(3000, () => {
   console.log("App is running on port 3000");
